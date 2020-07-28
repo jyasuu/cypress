@@ -4,13 +4,28 @@ import {
   StaticResponse,
   BackendStaticResponse,
   FixtureOpts,
-  GenericStaticResponse,
+  ThrottleKbpsPreset,
 } from '@packages/net-stubbing/lib/types'
 
-export const STATIC_RESPONSE_KEYS: (keyof GenericStaticResponse<void, void>)[] = ['body', 'fixture', 'statusCode', 'headers', 'forceNetworkError']
+// based off of https://source.chromium.org/chromium/chromium/src/+/master:chrome/test/chromedriver/chrome/network_list.cc
+const NETWORK_THROTTLE_PRESETS: { [preset: string]: number } = {
+  'gprs': 50,
+  'edge': 250,
+  '2g+': 450,
+  '3g': 750,
+  '3g+': 1536,
+  '4g': 4096,
+  'dsl': 2048,
+  'wifi': 30720,
+}
+
+const getNetworkThrottlePreset = (preset: ThrottleKbpsPreset) => NETWORK_THROTTLE_PRESETS[preset]
+
+// user-facing StaticResponse only
+export const STATIC_RESPONSE_KEYS: (keyof StaticResponse)[] = ['body', 'fixture', 'statusCode', 'headers', 'forceNetworkError', 'throttleKbps', 'delayMs']
 
 export function validateStaticResponse (staticResponse: StaticResponse): void {
-  const { body, fixture, statusCode, headers, forceNetworkError } = staticResponse
+  const { body, fixture, statusCode, headers, forceNetworkError, throttleKbps, delayMs } = staticResponse
 
   if (forceNetworkError && (body || statusCode || headers)) {
     throw new Error('`forceNetworkError`, if passed, must be the only option in the StaticResponse.')
@@ -32,6 +47,20 @@ export function validateStaticResponse (staticResponse: StaticResponse): void {
 
   if (headers && _.keys(_.omitBy(headers, _.isString)).length) {
     throw new Error('`headers` must be a map of strings to strings.')
+  }
+
+  if (!_.isUndefined(throttleKbps)) {
+    if (_.isNumber(throttleKbps) && (throttleKbps < 0 || !_.isFinite(throttleKbps))) {
+      throw new Error('`throttleKbps` must be a finite, positive number.')
+    } else if (_.isString(throttleKbps) && !getNetworkThrottlePreset(throttleKbps)) {
+      throw new Error(`An invalid \`throttleKbps\` preset was passed. Valid presets are: ${_.keys(NETWORK_THROTTLE_PRESETS).join(', ')}`)
+    } else if (!_.isString(throttleKbps) && !_.isNumber(throttleKbps)) {
+      throw new Error('`throttleKbps` must be a finite, positive number or a string preset.')
+    }
+  }
+
+  if (delayMs && (!_.isFinite(delayMs) || delayMs < 0)) {
+    throw new Error('`delayMs` must be a finite, positive number.')
   }
 }
 
@@ -75,7 +104,7 @@ function getFixtureOpts (fixture: string): FixtureOpts {
 }
 
 export function getBackendStaticResponse (staticResponse: Readonly<StaticResponse>): BackendStaticResponse {
-  const backendStaticResponse: BackendStaticResponse = _.omit(staticResponse, 'body', 'fixture')
+  const backendStaticResponse: BackendStaticResponse = _.omit(staticResponse, 'body', 'fixture', 'throttleKbps', 'delayMs')
 
   if (staticResponse.fixture) {
     backendStaticResponse.fixture = getFixtureOpts(staticResponse.fixture)
@@ -88,6 +117,16 @@ export function getBackendStaticResponse (staticResponse: Readonly<StaticRespons
       backendStaticResponse.body = JSON.stringify(staticResponse.body)
       _.set(backendStaticResponse, 'headers.content-type', 'application/json')
     }
+  }
+
+  if (!_.isUndefined(staticResponse.throttleKbps)) {
+    const kbps = staticResponse.throttleKbps
+
+    backendStaticResponse.throttleKbps = _.isString(kbps) ? getNetworkThrottlePreset(kbps) : kbps
+  }
+
+  if (staticResponse.delayMs) {
+    backendStaticResponse.continueResponseAt = Date.now() + staticResponse.delayMs
   }
 
   return backendStaticResponse
