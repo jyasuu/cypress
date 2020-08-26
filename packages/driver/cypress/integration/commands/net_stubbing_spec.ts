@@ -718,14 +718,6 @@ describe('network stubbing', function () {
         .wait('@third')
         .wait('@final')
       })
-
-      it('doesn\'t care about trailing slashes', function () {
-
-      })
-
-      it('handles full URLs as expected', function () {
-
-      })
     })
 
     context('with StaticResponse shorthand', function () {

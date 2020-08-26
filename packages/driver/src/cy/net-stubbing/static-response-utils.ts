@@ -6,6 +6,7 @@ import {
   FixtureOpts,
   ThrottleKbpsPreset,
 } from '@packages/net-stubbing/lib/types'
+import $errUtils from '../../cypress/error_utils'
 
 // based off of https://source.chromium.org/chromium/chromium/src/+/master:chrome/test/chromedriver/chrome/network_list.cc
 const NETWORK_THROTTLE_PRESETS: { [preset: string]: number } = {
@@ -24,29 +25,33 @@ const getNetworkThrottlePreset = (preset: ThrottleKbpsPreset) => NETWORK_THROTTL
 // user-facing StaticResponse only
 export const STATIC_RESPONSE_KEYS: (keyof StaticResponse)[] = ['body', 'fixture', 'statusCode', 'headers', 'forceNetworkError', 'throttleKbps', 'delayMs']
 
-export function validateStaticResponse (staticResponse: StaticResponse): void {
+export function validateStaticResponse (cmd: string, staticResponse: StaticResponse): void {
+  const err = (message) => {
+    $errUtils.throwErrByPath('net_stubbing.invalid_static_response', { args: { cmd, message, staticResponse } })
+  }
+
   const { body, fixture, statusCode, headers, forceNetworkError, throttleKbps, delayMs } = staticResponse
 
   if (forceNetworkError && (body || statusCode || headers)) {
-    throw new Error('`forceNetworkError`, if passed, must be the only option in the StaticResponse.')
+    err('`forceNetworkError`, if passed, must be the only option in the StaticResponse.')
   }
 
   if (body && fixture) {
-    throw new Error('`body` and `fixture` cannot both be set, pick one.')
+    err('`body` and `fixture` cannot both be set, pick one.')
   }
 
   if (fixture && !_.isString(fixture)) {
-    throw new Error('`fixture` must be a string containing a path and, optionally, an encoding separated by a comma (for example, "foo.txt,ascii").')
+    err('`fixture` must be a string containing a path and, optionally, an encoding separated by a comma (for example, "foo.txt,ascii").')
   }
 
   // statusCode must be a three-digit integer
   // @see https://tools.ietf.org/html/rfc2616#section-6.1.1
   if (statusCode && !(_.isNumber(statusCode) && _.inRange(statusCode, 100, 999))) {
-    throw new Error('`statusCode` must be a number between 100 and 999 (inclusive).')
+    err('`statusCode` must be a number between 100 and 999 (inclusive).')
   }
 
   if (headers && _.keys(_.omitBy(headers, _.isString)).length) {
-    throw new Error('`headers` must be a map of strings to strings.')
+    err('`headers` must be a map of strings to strings.')
   }
 
   if (!_.isUndefined(throttleKbps)) {

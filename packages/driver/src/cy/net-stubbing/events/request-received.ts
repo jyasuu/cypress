@@ -13,7 +13,7 @@ import {
   getBackendStaticResponse,
   parseStaticResponseShorthand,
 } from '../static-response-utils'
-import $errUtils from '@packages/driver/src/cypress/error_utils'
+import $errUtils from '../../../cypress/error_utils'
 import { HandlerFn } from './'
 import Bluebird from 'bluebird'
 
@@ -135,7 +135,8 @@ export const onRequestReceived: HandlerFn<NetEventFrames.HttpRequestReceived> = 
 
       if (!_.isUndefined(responseHandler)) {
         // `replyHandler` is a StaticResponse
-        validateStaticResponse(responseHandler)
+        validateStaticResponse('req.reply', responseHandler)
+
         continueFrame.staticResponse = getBackendStaticResponse(responseHandler as StaticResponse)
       }
 

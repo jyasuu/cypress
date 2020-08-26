@@ -27,25 +27,24 @@ import $errUtils from '../../cypress/error_utils'
  * DICT_STRING_MATCHER_FIELDS objects
  */
 function getAllStringMatcherFields (options: RouteMatcherOptions): string[] {
-  return STRING_MATCHER_FIELDS
-  .concat(
-    // add the nested DictStringMatcher values to the list of fields to annotate
-    _.flatten(
-      _.filter(
-        DICT_STRING_MATCHER_FIELDS.map((field) => {
-          const value = options[field]
+  // add the nested DictStringMatcher values to the list of fields to annotate
+  return _.chain(DICT_STRING_MATCHER_FIELDS)
+  .map((field): string[] | string => {
+    const value = options[field]
 
-          if (value) {
-            return _.keys(value).map((key) => {
-              return `${field}.${key}`
-            })
-          }
+    if (value) {
+      // if this DICT_STRING_MATCHER is set, return a list of the prop paths
+      return _.keys(value).map((key) => {
+        return `${field}.${key}`
+      })
+    }
 
-          return ''
-        }),
-      ),
-    ),
-  )
+    return ''
+  })
+  .compact()
+  .flatten()
+  .concat(STRING_MATCHER_FIELDS)
+  .value()
 }
 
 /**
@@ -92,26 +91,34 @@ function isNumberMatcher (obj): obj is NumberMatcher {
   return Array.isArray(obj) ? _.every(obj, _.isNumber) : _.isNumber(obj)
 }
 
-function validateRouteMatcherOptions (routeMatcher: RouteMatcherOptions): void {
-  if (_.isEmpty(routeMatcher)) {
-    throw new Error('The RouteMatcher does not contain any keys. You must pass something to match on.')
+function validateRouteMatcherOptions (routeMatcher: RouteMatcherOptions): { isValid: boolean, message?: string } {
+  const err = (message) => {
+    return { isValid: false, message }
   }
 
-  getAllStringMatcherFields(routeMatcher).forEach((path) => {
+  if (_.isEmpty(routeMatcher)) {
+    return err('The RouteMatcher does not contain any keys. You must pass something to match on.')
+  }
+
+  const stringMatcherFields = getAllStringMatcherFields(routeMatcher)
+
+  for (const path of stringMatcherFields) {
     const v = _.get(routeMatcher, path)
 
     if (_.has(routeMatcher, path) && !isStringMatcher(v)) {
-      throw new Error(`\`${path}\` must be a string or a regular expression.`)
+      return err(`\`${path}\` must be a string or a regular expression.`)
     }
-  })
+  }
 
   if (_.has(routeMatcher, 'https') && !_.isBoolean(routeMatcher.https)) {
-    throw new Error('`https` must be a boolean.')
+    return err('`https` must be a boolean.')
   }
 
   if (_.has(routeMatcher, 'port') && !isNumberMatcher(routeMatcher.port)) {
-    throw new Error('`port` must be a number or a list of numbers.')
+    return err('`port` must be a number or a list of numbers.')
   }
+
+  return { isValid: true }
 }
 
 export function addCommand (Commands, Cypress: Cypress.Cypress, cy: Cypress.cy, state: Cypress.State) {
@@ -200,11 +207,7 @@ export function addCommand (Commands, Cypress: Cypress.Cypress, cy: Cypress.cy, 
           }
         }
 
-        try {
-          validateStaticResponse(<StaticResponse>handler)
-        } catch (err) {
-          return $errUtils.throwErrByPath('net_stubbing.route2.invalid_static_response', { args: { err, staticResponse: handler } })
-        }
+        validateStaticResponse('cy.route2', <StaticResponse>handler)
 
         staticResponse = handler as StaticResponse
         break
@@ -266,11 +269,10 @@ export function addCommand (Commands, Cypress: Cypress.Cypress, cy: Cypress.cy, 
     }
 
     const routeMatcherOptions = getMatcherOptions()
+    const { isValid, message } = validateRouteMatcherOptions(routeMatcherOptions)
 
-    try {
-      validateRouteMatcherOptions(routeMatcherOptions)
-    } catch (err) {
-      $errUtils.throwErrByPath('net_stubbing.route2.invalid_route_matcher', { args: { err, matcher: routeMatcherOptions } })
+    if (!isValid) {
+      $errUtils.throwErrByPath('net_stubbing.route2.invalid_route_matcher', { args: { message, matcher: routeMatcherOptions } })
     }
 
     return addRoute(routeMatcherOptions, handler as RouteHandler)

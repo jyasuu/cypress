@@ -11,7 +11,7 @@ import {
   STATIC_RESPONSE_KEYS,
   getBackendStaticResponse,
 } from '../static-response-utils'
-import $errUtils from '@packages/driver/src/cypress/error_utils'
+import $errUtils from '../../../cypress/error_utils'
 import { HandlerFn } from './'
 import Bluebird from 'bluebird'
 
@@ -65,7 +65,8 @@ export const onResponseReceived: HandlerFn<NetEventFrames.HttpResponseReceived> 
       }
 
       if (staticResponse) {
-        validateStaticResponse(staticResponse)
+        validateStaticResponse('res.send', staticResponse)
+
         continueFrame.staticResponse = getBackendStaticResponse(
           // arguments to res.send() are merged with the existing response
           _.defaultsDeep({}, staticResponse, _.pick(res, STATIC_RESPONSE_KEYS)),
